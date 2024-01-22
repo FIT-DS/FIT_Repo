@@ -41,6 +41,11 @@ def predict():
                 blob_client.upload_blob(csv_data, blob_type="BlockBlob", overwrite=True)
                 #predicting results
                 combined_predictions=train_predict(df,num_months)
+                combined_predictions = combined_predictions.fillna(0)
+                for col in combined_predictions.select_dtypes(include='float64'):
+                    combined_predictions[col] = combined_predictions[col].astype(int)
+                columns_to_replace = ['Best Model', 'Actual', 'Forecast_Lower', 'Forecast', 'Forecast_Upper']
+                combined_predictions[columns_to_replace] = combined_predictions[columns_to_replace].replace(0, '')
                 print(combined_predictions)
                 #uploading forecast results to blob
                 blob_client = container_client.get_blob_client("forecast_results.csv")
