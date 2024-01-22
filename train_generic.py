@@ -721,7 +721,7 @@ def train_predict(data,no_months_forecast):
     # assigning labels to train,test,valid
     train_result['label']='train'
     test_result['label']='test'
-    forecast_result['label']='valid'
+    forecast_result['label']='forecast'
     final_dataframe=pd.concat([train_result,test_result,forecast_result],axis=0,ignore_index=True)
     final_dataframe=final_dataframe[['unique_id','Date','Intermittency_Type','label','Best Model','Actual','Forecast_Lower','Forecast','Forecast_Upper']]
     final_dataframe.to_csv("final_dataframe.csv")
