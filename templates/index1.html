@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Demand Forecasting</title>
+    <script src="https://cdn.powerbi.com/iframe/embed.js"></script>
     <link href='https://fonts.googleapis.com/css?family=Pacifico' rel='stylesheet' type='text/css'>
     <link href='https://fonts.googleapis.com/css?family=Arimo' rel='stylesheet' type='text/css'>
     <link href='https://fonts.googleapis.com/css?family=Hind:300' rel='stylesheet' type='text/css'>
@@ -152,7 +153,11 @@
                 <label for="NOM">Months to be Forecasted:</label>
                 <input type="number" name="NOM" placeholder="Enter Number of Months" required class="form-control">
             </div>
-            <button type="submit" class="btn btn-primary">Predict</button>
+            <button type="submit" class="btn btn-primary" id="predictButton">Predict</button>
+        </form>
+
+        <form action="https://app.powerbi.com/groups/af788735-0b24-4d8c-b0f7-a01715f9a55c/reports/167335c4-8519-4f71-9de2-5c9126e932ff" method="get" id="viewReportForm">
+            <button type="submit" class="btn btn-primary">View Existing Report</button>
         </form>
 
         <br>
@@ -165,6 +170,9 @@
     </div>
     {% for table in tables %}
       <div class="center-table">
+        <form action="{{ url_for('refresh_and_view_report') }}" method="get" id="viewReportForm">
+            <button type="submit" class="btn btn-primary">Generate Report</button>
+        </form>
         <div class="title-box">
           <h2><span class="prediction-text">{{ titles }}</span></h2>
         </div>
