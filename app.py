@@ -46,7 +46,9 @@ def predict():
                     combined_predictions[col] = combined_predictions[col].astype(int)
                 columns_to_replace = ['Best Model', 'Actual', 'Forecast_Lower', 'Forecast', 'Forecast_Upper']
                 combined_predictions[columns_to_replace] = combined_predictions[columns_to_replace].replace(0, '')
+                print("===============================================")
                 print(combined_predictions)
+                print("===============================================")
                 #uploading forecast results to blob
                 blob_client = container_client.get_blob_client("forecast_results.csv")
                 combined_predictions.to_csv('forecast_results.csv', index=False)  # Save to a local file for demonstration
