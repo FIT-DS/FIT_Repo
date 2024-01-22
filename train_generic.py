@@ -5,7 +5,6 @@ import contextlib
 import pandas as pd
 import numpy as np
 warnings.filterwarnings('ignore')
-import matplotlib.pyplot as plt
 from datetime import datetime,timedelta
 from statsmodels.tsa.seasonal import seasonal_decompose
 from statsmodels.tsa.seasonal import STL
@@ -17,13 +16,7 @@ from sklearn.metrics import mean_absolute_error,mean_absolute_percentage_error
 from sklearn.model_selection import TimeSeriesSplit
 import pmdarima as pm
 from sklearn.model_selection import train_test_split
-import xgboost as xgb
-import lightgbm as lgb
-import catboost as cb
 from scipy import stats
-from skforecast.ForecasterAutoreg import ForecasterAutoreg
-from skforecast.model_selection import grid_search_forecaster
-from sklearn.ensemble import HistGradientBoostingRegressor
 import time
 from datetime import datetime
 
@@ -556,11 +549,12 @@ def pipeline2_forecast(train_check,test_check,master_forecast_df,fin_id,params_s
     return forecast_df
 
 def metrics_evaluation(forecast_df):
-    models=['SES','DES','TES','ARIMA','SARIMA','SKFORECAST_HISTGRADBOOST',
-                       'SKFORECAST_CATBOOST','SKFORECAST_LGB','SKFORECAST_XGB','HYBRID_DES_SKFORECAST_XGB','HYBRID_DES_SKFORECAST_LGB','HYBRID_DES_SKFORECAST_CATBOOST',#,'HYBRID_DES_SKFORECAST_HISTGRADBOOST',
-'HYBRID_TES_SKFORECAST_XGB','HYBRID_TES_SKFORECAST_LGB','HYBRID_TES_SKFORECAST_CATBOOST',#,'HYBRID_TES_SKFORECAST_HISTGRADBOOST',
-'HYBRID_ARIMA_SKFORECAST_XGB','HYBRID_ARIMA_SKFORECAST_LGB','HYBRID_ARIMA_SKFORECAST_CATBOOST',#,'HYBRID_ARIMA_SKFORECAST_HISTGRADBOOST',
-'HYBRID_SARIMA_SKFORECAST_XGB','HYBRID_SARIMA_SKFORECAST_LGB','HYBRID_SARIMA_SKFORECAST_CATBOOST']#,'HYBRID_SARIMA_SKFORECAST_HISTGRADBOOST']#,'Auto_ML']
+#     models=['SES','DES','TES','ARIMA','SARIMA','SKFORECAST_HISTGRADBOOST',
+#                        'SKFORECAST_CATBOOST','SKFORECAST_LGB','SKFORECAST_XGB','HYBRID_DES_SKFORECAST_XGB','HYBRID_DES_SKFORECAST_LGB','HYBRID_DES_SKFORECAST_CATBOOST',#,'HYBRID_DES_SKFORECAST_HISTGRADBOOST',
+# 'HYBRID_TES_SKFORECAST_XGB','HYBRID_TES_SKFORECAST_LGB','HYBRID_TES_SKFORECAST_CATBOOST',#,'HYBRID_TES_SKFORECAST_HISTGRADBOOST',
+# 'HYBRID_ARIMA_SKFORECAST_XGB','HYBRID_ARIMA_SKFORECAST_LGB','HYBRID_ARIMA_SKFORECAST_CATBOOST',#,'HYBRID_ARIMA_SKFORECAST_HISTGRADBOOST',
+# 'HYBRID_SARIMA_SKFORECAST_XGB','HYBRID_SARIMA_SKFORECAST_LGB','HYBRID_SARIMA_SKFORECAST_CATBOOST']#,'HYBRID_SARIMA_SKFORECAST_HISTGRADBOOST']#,'Auto_ML']
+    models=['SES','DES','TES','ARIMA','SARIMA']
     error_metric_dataframe=pd.DataFrame(columns=['Model','MSE','MAE','RMSE','MAPE'])
     best_mae=float('inf')
     best_mse=float('inf')
@@ -667,23 +661,24 @@ def train_predict(data,no_months_forecast):
     print("pipeline 1 running time",end-st)
 
 
-    # for running pipeline 2
-    st=time.time()
-    master_forecast_df_2=pd.DataFrame()
-    params_struct=pd.DataFrame(columns=['unique_id','XGB','LGB','CATBOOST','HISTGRADBOOST'])
-    start_time=time.time()
-    # csv_filename='forecast_results2.csv'
+    # # for running pipeline 2
+    # st=time.time()
+    # master_forecast_df_2=pd.DataFrame()
+    # params_struct=pd.DataFrame(columns=['unique_id','XGB','LGB','CATBOOST','HISTGRADBOOST'])
+    # start_time=time.time()
+    # # csv_filename='forecast_results2.csv'
 
-    for fin_id in list(train_check['unique_id'].unique()):
-        forecast_df=pipeline2_forecast(train_check,test_check,master_forecast_df,fin_id,params_struct,no_months_forecast)
-        master_forecast_df_2=pd.concat([master_forecast_df_2,forecast_df],axis=0)
-    # master_forecast_df_2.to_csv(os.path.join(output_dir,'forecast_results2'+'.csv'),index=False)  
-    end=time.time()
-    print("pipeline 2 running time",end-st)
+    # for fin_id in list(train_check['unique_id'].unique()):
+    #     forecast_df=pipeline2_forecast(train_check,test_check,master_forecast_df,fin_id,params_struct,no_months_forecast)
+    #     master_forecast_df_2=pd.concat([master_forecast_df_2,forecast_df],axis=0)
+    # # master_forecast_df_2.to_csv(os.path.join(output_dir,'forecast_results2'+'.csv'),index=False)  
+    # end=time.time()
+    # print("pipeline 2 running time",end-st)
     
 
-    # combining pipeline_1 and pipeline_2 results
-    master_forecast_df_fin=pd.concat([master_forecast_df,master_forecast_df_2],axis=1)
+    # # combining pipeline_1 and pipeline_2 results
+    # master_forecast_df_fin=pd.concat([master_forecast_df,master_forecast_df_2],axis=1)
+    master_forecast_df_fin=master_forecast_df
     
     # to remove the duplicate values from the dataframe
     master_forecast_df_fin = master_forecast_df_fin.loc[:, ~master_forecast_df_fin.columns.duplicated()]
@@ -715,20 +710,19 @@ def train_predict(data,no_months_forecast):
         mid_frame['Intermittency_Type']=forecast_df['Intermittency_check']
         mid_frame['Best Model']=best_model
         mid_frame['Date']=forecast_df['Date']
-        final_ormaefit_output=pd.concat([final_ormaefit_output,mid_frame],axis=0)
-        final_ormaefit_output=final_ormaefit_output[['unique_id','Intermittency_Type','Best Model','Date','Forecast','Actual','Forecast_Upper','Forecast_Lower']]
+        final_ormaefit_output=pd.concat([final_ormaefit_output,mid_frame],axis=0)  
+    final_ormaefit_output = final_ormaefit_output[['Date','unique_id','Intermittency_Type','Best Model','Actual','Forecast_Lower','Forecast','Forecast_Upper']]
+        
+    train_result=train_check
+    train_result.rename(columns={'Values':'Actual'},inplace=True)
+    test_result = final_ormaefit_output[final_ormaefit_output['Actual'].notnull()]
+    forecast_result = final_ormaefit_output[final_ormaefit_output['Actual'].isnull()]
     
-    forcast_result = final_ormaefit_output[final_ormaefit_output['Actual'].isnull()]
-    forcast_result = forcast_result[['Date','unique_id','Intermittency_Type','Best Model','Forecast','Forecast_Lower','Forecast_Upper']]
-    return forcast_result
-
-
-
-
-
-
-
-
-
-
-
+    # assigning labels to train,test,valid
+    train_result['label']='train'
+    test_result['label']='test'
+    forecast_result['label']='valid'
+    final_dataframe=pd.concat([train_result,test_result,forecast_result],axis=0,ignore_index=True)
+    final_dataframe=final_dataframe[['unique_id','Date','Intermittency_Type','label','Best Model','Actual','Forecast_Lower','Forecast','Forecast_Upper']]
+    final_dataframe.to_csv("final_dataframe.csv")
+    return final_dataframe
