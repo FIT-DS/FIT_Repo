@@ -1,9 +1,6 @@
 import flask
 import json
 from flask import Flask, request, render_template, jsonify, redirect, url_for
-from marshmallow import Schema, fields, ValidationError, validate
-import pickle
-import waitress
 import os
 import time
 import pandas as pd
@@ -131,6 +128,68 @@ def predict_api():
 
     except Exception as e:
         return jsonify({'error': str(e)})
+
+@app.route('/refresh_and_view_report_api', methods=['POST'])
+def refresh_and_view_report_api():
+    try:
+        # Get authentication details (replace with your actual values)
+        AUTHORITY_URL = 'https://login.windows.net/common'
+        RESOURCE = 'https://analysis.windows.net/powerbi/api'
+        # Replace these values with your actual values
+        client_id = "1bc9dbcb-e809-4172-a42b-54cc5a100a3c"
+        client_secret = "MY18Q~YBzXFDjdBz8uc6K~Xq0UH_UaIPZ05f_aNm"
+        username = "fit_ds@ormae.com"
+        password = "Wafers@2024"
+        tenant_id = "19e3cf18-820e-4e14-8589-72f62ed533f2"
+        api_url = "https://api.powerbi.com/v1.0/myorg/"
+        dataset_id = "f6a8ec1c-59ed-4716-b335-71a8c7bb7969"
+        report_id = "167335c4-8519-4f71-9de2-5c9126e932ff"
+        group_id = "af788735-0b24-4d8c-b0f7-a01715f9a55c"
+        # Get an access token using Resource Owner Password Credentials (ROPC)
+        token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+        token_payload = {
+                        'grant_type': 'password',
+                        'client_id': client_id,
+                        'client_secret': client_secret,
+                        # 'resource': 'https://graph.microsoft.com',
+                        'scope': "https://analysis.windows.net/powerbi/api/.default",
+                        'username': username,
+                        'password': password,
+                        }
+        token_response = requests.get(token_url, data=token_payload)
+        token_data = token_response.json()
+
+        if 'access_token' in token_data:
+            access_token = token_data['access_token']
+
+            # Define URLs for dataset and report refresh
+            refresh_url_data = f"{api_url}datasets/{dataset_id}/refreshes"
+            refresh_url_report = f"{api_url}groups/{group_id}/reports/{report_id}/refreshes"
+
+            # Set headers for API request
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            }
+
+            # Trigger dataset refresh
+            response_data = requests.post(refresh_url_data, headers=headers)
+
+            # Trigger report refresh
+            response_report = requests.post(refresh_url_report, headers=headers)
+
+            print(response_data)
+            print("Dataset Refresh Response:", response_data.text)
+            print(response_report)
+            print("Report Refresh Responsee:", response_report.text)
+
+            return jsonify({"success": True, "message": "Refresh triggered successfully."})
+
+        else:
+            return jsonify({"success": False, "message": f"Failed to obtain access token. Response: {token_data}"})
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 if __name__ == '__main__':
     app.run(debug=True)
