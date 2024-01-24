@@ -76,8 +76,8 @@ def refresh_and_view_report():
         password = "Wafers@2024"
         tenant_id = "19e3cf18-820e-4e14-8589-72f62ed533f2"
         api_url = "https://api.powerbi.com/v1.0/myorg/"
-        dataset_id = "f6a8ec1c-59ed-4716-b335-71a8c7bb7969"
-        report_id = "167335c4-8519-4f71-9de2-5c9126e932ff"
+        dataset_id = "f8300088-9502-422a-af8b-cb46e619c640"
+        report_id = "dc049b20-7adb-49d5-9172-d895a661648e"
         group_id = "af788735-0b24-4d8c-b0f7-a01715f9a55c"
         # Get an access token using Resource Owner Password Credentials (ROPC)
         token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
@@ -149,8 +149,8 @@ def refresh_and_view_report_api():
         password = "Wafers@2024"
         tenant_id = "19e3cf18-820e-4e14-8589-72f62ed533f2"
         api_url = "https://api.powerbi.com/v1.0/myorg/"
-        dataset_id = "f6a8ec1c-59ed-4716-b335-71a8c7bb7969"
-        report_id = "167335c4-8519-4f71-9de2-5c9126e932ff"
+        dataset_id = "f8300088-9502-422a-af8b-cb46e619c640"
+        report_id = "dc049b20-7adb-49d5-9172-d895a661648e"
         group_id = "af788735-0b24-4d8c-b0f7-a01715f9a55c"
         # Get an access token using Resource Owner Password Credentials (ROPC)
         token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
