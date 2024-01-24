@@ -5,6 +5,7 @@ import contextlib
 import pandas as pd
 import numpy as np
 warnings.filterwarnings('ignore')
+# import matplotlib.pyplot as plt
 from datetime import datetime,timedelta
 from statsmodels.tsa.seasonal import seasonal_decompose
 from statsmodels.tsa.seasonal import STL
@@ -16,9 +17,16 @@ from sklearn.metrics import mean_absolute_error,mean_absolute_percentage_error
 from sklearn.model_selection import TimeSeriesSplit
 import pmdarima as pm
 from sklearn.model_selection import train_test_split
+# import xgboost as xgb
+# import lightgbm as lgb
+# import catboost as cb
 from scipy import stats
+# from skforecast.ForecasterAutoreg import ForecasterAutoreg
+# from skforecast.model_selection import grid_search_forecaster
+# from sklearn.ensemble import HistGradientBoostingRegressor
 import time
 from datetime import datetime
+from sktime.performance_metrics.forecasting import mean_absolute_scaled_error
 
 def create_output_directory(output_dir):
     # Ensure the base directory exists
@@ -56,7 +64,7 @@ def check_intermittency(df,col):
     ADI=total_periods/non_zeroes
     #display(ADI)
     label=''
-     
+    df=df[df[col]!=0]
     COV= (np.std(df[col])/np.mean(df[col]))**2
     #display(COV)
     
@@ -77,17 +85,18 @@ def intermittency_dict_label(check_df,m_id):
 # needs to be revised later for pipeline sections
 def full_train_test(train,test,intermittency_dict):
     test_check,train_check=pd.DataFrame(),pd.DataFrame()
-    test_df=test.copy()
     for intermittent_k,intermittent_v in intermittency_dict.items():
-        train['Intermittency_Type']=str(intermittent_k)
-        test_df['Intermittency_Type']=str(intermittent_k)
-        train_check=pd.concat([train_check,train],axis=0)
-        test_check=pd.concat([test_check,test_df],axis=0)
-    return test_check,train_check,test_df
+        train1=train[train['unique_id'].isin(intermittent_v)]
+        test1=test[test['unique_id'].isin(intermittent_v)]
+        train1['Intermittency_Type']=str(intermittent_k)
+        test1['Intermittency_Type']=str(intermittent_k)
+        train_check=pd.concat([train_check,train1],axis=0)
+        test_check=pd.concat([test_check,test1],axis=0)
+    return test_check,train_check
 
 # calculating prediction interval
 def calculate_prediction_interval(predictions,forecast_errors):
-    alpha=0.2
+    alpha=0.5
     z_alpha = np.abs(stats.norm.ppf(1 - alpha / 2))
     lower_bound=predictions-z_alpha*forecast_errors
     upper_bound=predictions+z_alpha*forecast_errors
@@ -111,106 +120,126 @@ def get_significant_lags(df, ycol, desired_lags=40):
 
 
 def SES(df_try,forecast_length,forecast_df):
-    alpha=0.05
-    model_ses=SimpleExpSmoothing(df_try)
-    logging.info("Fitting Simple Exponential Smoothing model...")
-    fit_ses=model_ses.fit()
-    logging.info("Model fit successfully.")
-    
-    logging.info(f"Forecasting {forecast_length} steps ahead...")
-    forecast_df['SES']=fit_ses.forecast(steps=(forecast_length)).values
-    logging.info(f"Forecasting completed for {forecast_length} steps.")
-    forecast_error_std = np.std(fit_ses.resid)
-    lower_bound,upper_bound=calculate_prediction_interval(forecast_df['SES'],forecast_error_std)
-    
-    forecast_df['SES_Lower'] = lower_bound
-    forecast_df['SES_Upper'] = upper_bound
-    logging.info("SES function executed successfully.")
-    logging.info("")  # Add an empty line
-    return forecast_df
+    try:
+        alpha=0.05
+        model_ses=SimpleExpSmoothing(df_try)
+        logging.info("Fitting Simple Exponential Smoothing model...")
+        fit_ses=model_ses.fit()
+        logging.info("Model fit successfully.")
+        
+        logging.info(f"Forecasting {forecast_length} steps ahead...")
+        forecast_df['SES']=fit_ses.forecast(steps=(forecast_length)).values
+        logging.info(f"Forecasting completed for {forecast_length} steps.")
+        forecast_error_std = np.std(fit_ses.resid)
+        lower_bound,upper_bound=calculate_prediction_interval(forecast_df['SES'],forecast_error_std)
+        
+        forecast_df['SES_Lower'] = lower_bound
+        forecast_df['SES_Upper'] = upper_bound
+        logging.info("SES function executed successfully.")
+        logging.info("")  # Add an empty line
+        return forecast_df
+    except Exception  as e:
+        print(f"SES failed")
+        return forecast_df
 
 def DES(df_try,forecast_length,forecast_df):
-    model_des=ExponentialSmoothing(df_try,trend='add')
+    try:
+        model_des=ExponentialSmoothing(df_try,trend='add')
 
-    logging.info("Fitting DES model...")
-    fit_des=model_des.fit()
-    logging.info("Model fit successfully.")
+        logging.info("Fitting DES model...")
+        fit_des=model_des.fit()
+        logging.info("Model fit successfully.")
 
-    logging.info(f"Forecasting {forecast_length} steps ahead...")
-    forecast_df['DES']=fit_des.forecast(steps=(forecast_length)).values
-    logging.info(f"Forecasting completed for {forecast_length} steps.")
+        logging.info(f"Forecasting {forecast_length} steps ahead...")
+        forecast_df['DES']=fit_des.forecast(steps=(forecast_length)).values
+        logging.info(f"Forecasting completed for {forecast_length} steps.")
 
-    forecast_error_std = np.std(fit_des.resid)
-    lower_bound,upper_bound=calculate_prediction_interval(forecast_df['DES'],forecast_error_std)
-    
-    forecast_df['DES_Lower'] = lower_bound
-    forecast_df['DES_Upper'] = upper_bound
-    logging.info("DES function executed successfully.")
-    logging.info("")  # Add an empty line
-    return forecast_df
+        forecast_error_std = np.std(fit_des.resid)
+        lower_bound,upper_bound=calculate_prediction_interval(forecast_df['DES'],forecast_error_std)
+        
+        forecast_df['DES_Lower'] = lower_bound
+        forecast_df['DES_Upper'] = upper_bound
+        logging.info("DES function executed successfully.")
+        logging.info("")  # Add an empty line
+        return forecast_df
+    except Exception  as e:
+        print(f"DES failed")
+        return forecast_df
 
 
 def TES(df_try,forecast_length,forecast_df,seasonal_period,initial_method):
-    model_tes=ExponentialSmoothing(df_try,trend='add',seasonal='add',seasonal_periods=seasonal_period,initialization_method=initial_method)
-    
-    logging.info("Fitting TES model...")
-    fit_tes=model_tes.fit()
-    logging.info("Model fit successfully.")
+    try:
+        model_tes=ExponentialSmoothing(df_try,trend='add',seasonal='add',seasonal_periods=seasonal_period,initialization_method=initial_method)
+        
+        logging.info("Fitting TES model...")
+        fit_tes=model_tes.fit()
+        logging.info("Model fit successfully.")
 
-    logging.info(f"Forecasting {forecast_length} steps ahead...")
-    forecast_df['TES'] = fit_tes.forecast(steps=(forecast_length)).values
-    logging.info(f"Forecasting completed for {forecast_length} steps.")
-    forecast_error_std = np.std(fit_tes.resid)
-    lower_bound,upper_bound=calculate_prediction_interval(forecast_df['TES'],forecast_error_std)
-    
-    forecast_df['TES_Lower'] = lower_bound
-    forecast_df['TES_Upper'] = upper_bound
-    logging.info("TES function executed successfully.")
-    logging.info("")  # Add an empty line
-    return forecast_df
+        logging.info(f"Forecasting {forecast_length} steps ahead...")
+        forecast_df['TES'] = fit_tes.forecast(steps=(forecast_length)).values
+        logging.info(f"Forecasting completed for {forecast_length} steps.")
+        forecast_error_std = np.std(fit_tes.resid)
+        lower_bound,upper_bound=calculate_prediction_interval(forecast_df['TES'],forecast_error_std)
+        
+        forecast_df['TES_Lower'] = lower_bound
+        forecast_df['TES_Upper'] = upper_bound
+        logging.info("TES function executed successfully.")
+        logging.info("")  # Add an empty line
+        return forecast_df
+    except Exception  as e:
+        print(f"TES failed")
+        return forecast_df
 
 
 def ARIMA_check(df_try,forecast_length,forecast_df):
-    with contextlib.redirect_stdout(None):
-        autoarima_model=pm.auto_arima(df_try,seasonal=False,stepwise=True,trace=True,suppress_warnings=True,error_action="ignore")
-        p,d,q=autoarima_model.order
-        model_arima=pm.ARIMA(order=(p,d,q),seasonal=False)
+    try:
+        with contextlib.redirect_stdout(None):
+            autoarima_model=pm.auto_arima(df_try,seasonal=False,stepwise=True,trace=True,suppress_warnings=True,error_action="ignore")
+            p,d,q=autoarima_model.order
+            model_arima=pm.ARIMA(order=(p,d,q),seasonal=False)
 
-        logging.info("Fitting ARIMA model...")
-        model_arima.fit(df_try)
-        logging.info("Model fit successfully.")
+            logging.info("Fitting ARIMA model...")
+            model_arima.fit(df_try)
+            logging.info("Model fit successfully.")
 
-    logging.info(f"Forecasting {forecast_length} steps ahead...")
-    arima_forecast_results,conf_int_arima=model_arima.predict(n_periods=(forecast_length),return_conf_int=True)
-    logging.info(f"Forecasting completed for {forecast_length} steps.")
+        logging.info(f"Forecasting {forecast_length} steps ahead...")
+        arima_forecast_results,conf_int_arima=model_arima.predict(n_periods=(forecast_length),return_conf_int=True)
+        logging.info(f"Forecasting completed for {forecast_length} steps.")
 
-    forecast_df['ARIMA']=arima_forecast_results.values
-    forecast_df['ARIMA_Lower']=conf_int_arima[:,0]
-    forecast_df['ARIMA_Upper']=conf_int_arima[:,1]
-    logging.info("ARIMA function executed successfully.")
-    logging.info("")  # Add an empty line
-    return forecast_df
+        forecast_df['ARIMA']=arima_forecast_results.values
+        forecast_df['ARIMA_Lower']=conf_int_arima[:,0]
+        forecast_df['ARIMA_Upper']=conf_int_arima[:,1]
+        logging.info("ARIMA function executed successfully.")
+        logging.info("")  # Add an empty line
+        return forecast_df
+    except Exception  as e:
+        print(f"ARIMA failed")
+        return forecast_df
 
 def SARIMA_check(df_try,forecast_length,forecast_df):
-    auto_sarima_model=pm.auto_arima(df_try,seasonal=True,m=12,stepwise=True)
-    p,d,q=auto_sarima_model.order
-    P,D,Q,S=auto_sarima_model.seasonal_order
-    model_sarima=pm.ARIMA(order=(p,d,q),seasonal_order=(P,D,Q,S),initialization='approximate_diffuse') #added intialization due to linalg error
-    
-    logging.info("Fitting SARIMA model...")
-    model_sarima.fit(df_try)
-    logging.info("Model fit successfully.")
+    try:
+        auto_sarima_model=pm.auto_arima(df_try,seasonal=True,m=12,stepwise=True)
+        p,d,q=auto_sarima_model.order
+        P,D,Q,S=auto_sarima_model.seasonal_order
+        model_sarima=pm.ARIMA(order=(p,d,q),seasonal_order=(P,D,Q,S),initialization='approximate_diffuse') #added intialization due to linalg error
+        
+        logging.info("Fitting SARIMA model...")
+        model_sarima.fit(df_try)
+        logging.info("Model fit successfully.")
 
-    logging.info(f"Forecasting {forecast_length} steps ahead...")
-    sarima_forecast_results,conf_int_sarima=model_sarima.predict(n_periods=(forecast_length),return_conf_int=True)
-    logging.info(f"Forecasting completed for {forecast_length} steps.")
+        logging.info(f"Forecasting {forecast_length} steps ahead...")
+        sarima_forecast_results,conf_int_sarima=model_sarima.predict(n_periods=(forecast_length),return_conf_int=True)
+        logging.info(f"Forecasting completed for {forecast_length} steps.")
 
-    forecast_df['SARIMA']=sarima_forecast_results.values
-    forecast_df['SARIMA_Lower']=conf_int_sarima[:,0]#.conf_int().iloc[:,0]
-    forecast_df['SARIMA_Upper']=conf_int_sarima[:,1]
-    logging.info("SARIMA function executed successfully.")
-    logging.info("")  # Add an empty line
-    return forecast_df
+        forecast_df['SARIMA']=sarima_forecast_results.values
+        forecast_df['SARIMA_Lower']=conf_int_sarima[:,0]#.conf_int().iloc[:,0]
+        forecast_df['SARIMA_Upper']=conf_int_sarima[:,1]
+        logging.info("SARIMA function executed successfully.")
+        logging.info("")  # Add an empty line
+        return forecast_df
+    except Exception  as e:
+        print(f"SARIMA failed")
+        return forecast_df
 
 def SKFORECAST_XGB(df_try,test_df_try,forecast_length,forecast_df,lags_grid):
     params_dict=dict()
@@ -469,12 +498,9 @@ def pipeline1_forecast (train_check,test_check,fin_id, no_months_forecast,season
     reg_df_try=df_try.copy()
     df_try['Values']=df_try['Values'].astype(float)
     test_df_try=test_check[test_check.unique_id==fin_id]
-
-    reg_test_df_try=test_df_try.copy()
     forecast_df=pd.DataFrame()
     forecast_length=len(test_df_try)+no_months_forecast
     forecast_df=models_pipeline1(df_try['Values'],forecast_length,forecast_df,seasonal_period,initial_method)
-    # print('forecast_df',forecast_df)
     forecast_df['Intermittency_check']=test_df_try['Intermittency_Type'].values[-1]
     forecast_df['unique_id']=fin_id
     forecast_df['Actual'] = np.nan  # Initialize the target column with NaN
@@ -488,7 +514,6 @@ def pipeline1_forecast (train_check,test_check,fin_id, no_months_forecast,season
     extended_df = pd.DataFrame({'Date': extended_dates})
     result_df = pd.concat([df, extended_df], ignore_index=True)
     forecast_df['Date']=result_df['Date']
-    # print('result_df',result_df)
     
     return forecast_df
 
@@ -548,66 +573,57 @@ def pipeline2_forecast(train_check,test_check,master_forecast_df,fin_id,params_s
     forecast_df['Date']=result_df['Date']
     return forecast_df
 
-def metrics_evaluation(forecast_df):
+def metrics_evaluation(forecast_df,train_try):
 #     models=['SES','DES','TES','ARIMA','SARIMA','SKFORECAST_HISTGRADBOOST',
 #                        'SKFORECAST_CATBOOST','SKFORECAST_LGB','SKFORECAST_XGB','HYBRID_DES_SKFORECAST_XGB','HYBRID_DES_SKFORECAST_LGB','HYBRID_DES_SKFORECAST_CATBOOST',#,'HYBRID_DES_SKFORECAST_HISTGRADBOOST',
 # 'HYBRID_TES_SKFORECAST_XGB','HYBRID_TES_SKFORECAST_LGB','HYBRID_TES_SKFORECAST_CATBOOST',#,'HYBRID_TES_SKFORECAST_HISTGRADBOOST',
 # 'HYBRID_ARIMA_SKFORECAST_XGB','HYBRID_ARIMA_SKFORECAST_LGB','HYBRID_ARIMA_SKFORECAST_CATBOOST',#,'HYBRID_ARIMA_SKFORECAST_HISTGRADBOOST',
 # 'HYBRID_SARIMA_SKFORECAST_XGB','HYBRID_SARIMA_SKFORECAST_LGB','HYBRID_SARIMA_SKFORECAST_CATBOOST']#,'HYBRID_SARIMA_SKFORECAST_HISTGRADBOOST']#,'Auto_ML']
     models=['SES','DES','TES','ARIMA','SARIMA']
-    error_metric_dataframe=pd.DataFrame(columns=['Model','MSE','MAE','RMSE','MAPE'])
-    best_mae=float('inf')
-    best_mse=float('inf')
-    best_rmse=float('inf')
-    best_mape=float('inf')
+    best_mape_mase=float('inf')
     best_model='XYZ'
-    for model in models:
-        forecast_df[model+'_Error'] = forecast_df['Actual'] - forecast_df[model]
-        forecast_df[model+'_Absolute_Error'] = np.abs(forecast_df[model+'_Error'])
-        mae = forecast_df[model+'_Absolute_Error'].mean()
-        mse = (forecast_df[model+'_Error'] ** 2).mean()
-        rmse = np.sqrt(mse)
-        mape = (forecast_df[model+'_Absolute_Error'] / forecast_df['Actual']).mean() * 100
-        #if mae < best_mae and mse < best_mse and rmse < best_rmse and mape <best_mape:
-        if mape <best_mape:
-            # best_mae=mae
-            # best_mse=mse
-            # best_rmse=rmse
-            best_mape=mape
-            best_model=model
-        new_df=pd.DataFrame({'Model':model,'MSE':mse,'MAE':mae,'RMSE':rmse,'MAPE':mape},index=[0])
-        error_metric_dataframe=pd.concat([error_metric_dataframe,new_df],axis=0)
-    return error_metric_dataframe,best_mae,best_mse,best_rmse,best_mape,best_model
+
+    forecast_df=forecast_df.dropna()
+    
+    if forecast_df['Intermittency_check'].isin(['Lumpy','Intermittent']).all():
+        # print('is lumpy',forecast_df['Intermittency_check'].isin(['Lumpy','Intermittent']))
+        for model in models:
+            mase=mean_absolute_scaled_error(forecast_df['Actual'],forecast_df[model],y_train=train_try['Values'].values,multioutput='raw_values')
+            if mase <best_mape_mase:
+                best_mape_mase=mase
+                best_model=model
+            # new_df=pd.DataFrame({'Model':model,'MASE':mase},index=[0])
+            # error_metric_dataframe=pd.concat([error_metric_dataframe,new_df],axis=0)
+    else:   
+        for model in models:
+            forecast_df[model+'_Error'] = forecast_df['Actual'] - forecast_df[model]
+            forecast_df[model+'_Absolute_Error'] = np.abs(forecast_df[model+'_Error'])
+            # mae = forecast_df[model+'_Absolute_Error'].mean()
+            # mse = (forecast_df[model+'_Error'] ** 2).mean()
+            # rmse = np.sqrt(mse)
+            mape = (forecast_df[model+'_Absolute_Error'] / forecast_df['Actual']).mean() * 100
+            #if mae < best_mae and mse < best_mse and rmse < best_rmse and mape <best_mape:
+            if mape <best_mape_mase:
+                best_mape_mase=mape
+                best_model=model
+            # new_df=pd.DataFrame({'Model':model,'MSE':mse,'MAE':mae,'RMSE':rmse,'MAPE':mape},index=[0])
+            # error_metric_dataframe=pd.concat([error_metric_dataframe,new_df],axis=0)
+    return best_mape_mase,best_model
 
 
 def train_predict(data,no_months_forecast):
-    # creating output dir
-    st=time.time()
-    # output_dir = r'C:\Users\olw05\OneDrive - ORMAE\Desktop\forecasting_internal_api\output'
-    # output_dir = create_output_directory(output_dir)
-    end=time.time()
-    print("output_dir_time",end-st)
 
-    st=time.time()
     required_col_name=["unique_id", "Date", "Values"]
     data.columns=required_col_name
-    ###if data is given in weekly form starting---
-    data['Date']=pd.to_datetime(data['Date'])
-    data['month_year']=pd.to_datetime(data['Date'].dt.year.astype(str) + "-"+data['Date'].dt.month.astype(str)+"-01")
-    data_1=data.groupby(['unique_id','month_year'])['Values'].sum().reset_index()
-    data_1.rename(columns={"month_year":"Date"},inplace=True)
-    data_2=data_1.copy()
-    data_2['unique_id'] = data_2['unique_id'].replace('14265_1235', '14265_1236')
-    data=pd.concat([data_1,data_2])
-    data=data.reset_index(drop=True)
-    ###ending--- till here for data conversion,do not use till this part if you have monthly data
-     
+    
+    # data['Date'] = pd.to_datetime(data['Date'], format='%d-%m-%Y').dt.strftime('%Y-%m-%d')
+  
     # splitting train and test data
+    st=time.time()
     percent_split=10
     train,test=train_test_split(data,percent_split)
-    print(len(train),len(test))
     end=time.time()
-    print("data_preprocessing_time",end-st)
+    print("train_test_split time",end-st)
 
     # creating intermittency_dict
     st=time.time()
@@ -634,9 +650,11 @@ def train_predict(data,no_months_forecast):
             intermittency_list.append(item)
 
     st=time.time()
-    test_check,train_check,test_df=full_train_test(train,test,intermittency_dict)
+    test_check,train_check=full_train_test(train,test,intermittency_dict)
     end=time.time()
     print("full_train_test_time",end-st)
+    
+    print("train_test",train_check,test_check)
 
 
     #converting date into datetime object
@@ -645,18 +663,19 @@ def train_predict(data,no_months_forecast):
 
     # for running pipeline 1
     st=time.time()
-    seasonal_period=12  
+    seasonal_period=12
     initial_method='heuristic'
-    # user_input = input("months for you want to forecast: ")
-    # no_months_forecast=int(user_input)
     train_check['Values']=train_check['Values'].astype(float)
     model_implemented=['SES','DES','TES']
-
+    reject=[]
     master_forecast_df=pd.DataFrame()
     for fin_id in list(train_check['unique_id'].unique()):
-        forecast_df=pipeline1_forecast (train_check,test_check,fin_id,no_months_forecast,seasonal_period,initial_method)
-        master_forecast_df=pd.concat([master_forecast_df,forecast_df],axis=0)
-    # master_forecast_df.to_csv(os.path.join(output_dir,'forecast_results'+'.csv'),index=False)
+        try:
+            forecast_df=pipeline1_forecast (train_check,test_check,fin_id,no_months_forecast,seasonal_period,initial_method)
+            master_forecast_df=pd.concat([master_forecast_df,forecast_df],axis=0)
+        except Exception as e:
+            print(f"Error {e} occurred for key {fin_id}: Hence skipping this key")
+            reject.append(fin_id)
     end=time.time()
     print("pipeline 1 running time",end-st)
 
@@ -683,36 +702,39 @@ def train_predict(data,no_months_forecast):
     # to remove the duplicate values from the dataframe
     master_forecast_df_fin = master_forecast_df_fin.loc[:, ~master_forecast_df_fin.columns.duplicated()]
 
-    
     # for calculating the metric evaluation and best models
     final_error_metric_df=pd.DataFrame(columns=['unique_id','Intermittency_Type','Best_Model_Evaluated','MAPE'])
     for fin_id in list(train_check['unique_id'].unique()):
-        forecast_df=master_forecast_df_fin[master_forecast_df_fin['unique_id']==fin_id]
-        # print("forecast_df",forecast_df)
-        test_len_unique_id=len(test)//(test['unique_id'].nunique())
-        error_metric_dataframe,best_mae,best_mse,best_rmse,best_mape,best_model=metrics_evaluation(forecast_df.iloc[:test_len_unique_id])
-        new_df=pd.DataFrame({'unique_id':fin_id,'Intermittency_Type':str(forecast_df['Intermittency_check'][0]),'Best_Model_Evaluated':best_model,'MAPE':best_mape},index=[0])
-        final_error_metric_df=pd.concat([final_error_metric_df,new_df],axis=0)
-
-    # final_error_metric_df.to_csv(os.path.join(output_dir,'MAPE_values'+'.csv'),index=False)
+        try:
+            train_try=train[train['unique_id']==fin_id]
+            forecast_df=master_forecast_df_fin[master_forecast_df_fin['unique_id']==fin_id]
+            best_mape_mase,best_model=metrics_evaluation(forecast_df,train_try)
+            new_df=pd.DataFrame({'unique_id':fin_id,'Intermittency_Type':str(forecast_df['Intermittency_check'][0]),'Best_Model_Evaluated':best_model,'MAPE':best_mape_mase},index=[0])
+            final_error_metric_df=pd.concat([final_error_metric_df,new_df],axis=0)
+        except Exception as e:
+            print(e)
+            pass
 
 
     final_ormaefit_output=pd.DataFrame()
     for fin_id in train_check.unique_id.unique():
-        mid_frame=pd.DataFrame()
-        forecast_df=master_forecast_df_fin[master_forecast_df_fin['unique_id']==fin_id]
-        best_model=final_error_metric_df[final_error_metric_df.unique_id==fin_id]['Best_Model_Evaluated'].values[0]
-        mid_frame['Forecast']=forecast_df[best_model]
-        mid_frame['Forecast_Upper']=forecast_df[best_model+'_Upper']
-        mid_frame['Forecast_Lower']=forecast_df[best_model+'_Lower']
-        mid_frame['Actual']=forecast_df['Actual']
-        mid_frame['unique_id']=fin_id
-        mid_frame['Intermittency_Type']=forecast_df['Intermittency_check']
-        mid_frame['Best Model']=best_model
-        mid_frame['Date']=forecast_df['Date']
-        final_ormaefit_output=pd.concat([final_ormaefit_output,mid_frame],axis=0)  
+        try:
+            mid_frame=pd.DataFrame()
+            forecast_df=master_forecast_df_fin[master_forecast_df_fin['unique_id']==fin_id]
+            best_model=final_error_metric_df[final_error_metric_df.unique_id==fin_id]['Best_Model_Evaluated'].values[0]
+            mid_frame['Forecast']=forecast_df[best_model]
+            mid_frame['Forecast_Upper']=forecast_df[best_model+'_Upper']
+            mid_frame['Forecast_Lower']=forecast_df[best_model+'_Lower']
+            mid_frame['Actual']=forecast_df['Actual']
+            mid_frame['unique_id']=fin_id
+            mid_frame['Intermittency_Type']=forecast_df['Intermittency_check']
+            mid_frame['Best Model']=best_model
+            mid_frame['Date']=forecast_df['Date']
+            final_ormaefit_output=pd.concat([final_ormaefit_output,mid_frame],axis=0)  
+        except Exception as e:
+            print(e)
+            pass
     final_ormaefit_output = final_ormaefit_output[['Date','unique_id','Intermittency_Type','Best Model','Actual','Forecast_Lower','Forecast','Forecast_Upper']]
-        
     train_result=train_check
     train_result.rename(columns={'Values':'Actual'},inplace=True)
     test_result = final_ormaefit_output[final_ormaefit_output['Actual'].notnull()]
@@ -722,7 +744,15 @@ def train_predict(data,no_months_forecast):
     train_result['label']='train'
     test_result['label']='test'
     forecast_result['label']='forecast'
-    final_dataframe=pd.concat([train_result,test_result,forecast_result],axis=0,ignore_index=True)
+    #train test and valid at one place for each ids
+    final_dataframe=pd.DataFrame()
+    for id in list(train_check['unique_id'].unique()):
+        train_result1=train_result[train_result['unique_id']==id]
+        test_result1=test_result[test_result['unique_id']==id]
+        forecast_result1=forecast_result[forecast_result['unique_id']==id]
+        final_dataframe_id=pd.concat([train_result1,test_result1,forecast_result1],axis=0,ignore_index=True)
+        final_dataframe=pd.concat([final_dataframe,final_dataframe_id])
     final_dataframe=final_dataframe[['unique_id','Date','Intermittency_Type','label','Best Model','Actual','Forecast_Lower','Forecast','Forecast_Upper']]
     final_dataframe.to_csv("final_dataframe.csv")
     return final_dataframe
+
