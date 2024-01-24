@@ -5,7 +5,6 @@ import contextlib
 import pandas as pd
 import numpy as np
 warnings.filterwarnings('ignore')
-# import matplotlib.pyplot as plt
 from datetime import datetime,timedelta
 from statsmodels.tsa.seasonal import seasonal_decompose
 from statsmodels.tsa.seasonal import STL
@@ -17,13 +16,7 @@ from sklearn.metrics import mean_absolute_error,mean_absolute_percentage_error
 from sklearn.model_selection import TimeSeriesSplit
 import pmdarima as pm
 from sklearn.model_selection import train_test_split
-# import xgboost as xgb
-# import lightgbm as lgb
-# import catboost as cb
 from scipy import stats
-# from skforecast.ForecasterAutoreg import ForecasterAutoreg
-# from skforecast.model_selection import grid_search_forecaster
-# from sklearn.ensemble import HistGradientBoostingRegressor
 import time
 from datetime import datetime
 from sktime.performance_metrics.forecasting import mean_absolute_scaled_error
